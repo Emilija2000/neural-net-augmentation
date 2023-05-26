@@ -9,7 +9,7 @@ def augment_batch(rng, data, labels, num_p=3, keep_original=True,
                             keep_original=keep_original)
     #print(data_new[0])
     num_labels = num_p+1 if keep_original else num_p
-    labels_new = [labels[j] for i in range(num_labels) for j in range(len(labels))]
+    labels_new = [labels[j] for j in range(len(labels)) for i in range(num_labels)]
     return data_new, jnp.array(labels_new)
 
 def augment(rng,data, labels,num_p=4,verbose=True,keep_original=True,
@@ -34,23 +34,25 @@ def augment(rng,data, labels,num_p=4,verbose=True,keep_original=True,
     return data_new,jnp.array(labels_new)
 
 if __name__ == '__main__':
-    from model_zoo_jax.zoo_dataloader import load_nets,shuffle_data
+    from model_zoo_jax import load_nets,shuffle_data
     from jax import random
     
     rng = random.PRNGKey(42)
     
     inputs, all_labels = load_nets(n=16, 
-                                   data_dir='model_zoo_jax/checkpoints/mnist_smallCNN_fixed_zoo',
+                                   data_dir='../THESIS_first_old_path/model_zoo_jax/checkpoints/mnist_smallCNN_fixed_zoo',
                                    flatten=False,
                                    num_checkpoints=1)
     labels = all_labels["class_dropped"]
+    print(labels)
     
     rng, subkey = random.split(rng)
     filtered_inputs, filtered_labels = shuffle_data(subkey,inputs,labels,chunks=1)
     filtered_inputs, filtered_labels = inputs,labels
     
     rng, subkey = random.split(rng)
-    images,labels = augment_batch(subkey,filtered_inputs,filtered_labels,num_p=1,keep_original=False)
+    images,labels = augment_batch(subkey,filtered_inputs,filtered_labels,num_p=2,keep_original=True)
+    print(labels)
     print(images[0]['cnn/conv2_d']['w'].shape)
     
     batch = jax.tree_util.tree_map(lambda *x: list(x), *images)
