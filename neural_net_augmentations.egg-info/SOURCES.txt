@@ -1,0 +1,10 @@
+README.md
+setup.py
+augmentations/__init__.py
+augmentations/augment_utils.py
+augmentations/permutation_augmentation.py
+neural_net_augmentations.egg-info/PKG-INFO
+neural_net_augmentations.egg-info/SOURCES.txt
+neural_net_augmentations.egg-info/dependency_links.txt
+neural_net_augmentations.egg-info/requires.txt
+neural_net_augmentations.egg-info/top_level.txt

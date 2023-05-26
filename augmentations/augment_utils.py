@@ -1,7 +1,6 @@
 import jax
 import jax.numpy as jnp
 from augmentations.permutation_augmentation import permute_checkpoint,permute_batch
-#from permutation_augmentation import permute_checkpoint,permute_batch
 
 def augment_batch(rng, data, labels, num_p=3, keep_original=True,
                   layers = ["cnn/conv2_d","cnn/conv2_d_1","cnn/conv2_d_2", "cnn/linear"]):

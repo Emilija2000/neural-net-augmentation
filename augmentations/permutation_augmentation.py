@@ -49,7 +49,7 @@ def permute_batch(rng, checkpoints,
         raise NotImplementedError("Batches of different models cannot yet be permuted as a batch")
     
     checkpoint_list = []
-    repeated_list = [checkpoint for _ in range(num_permutations) for checkpoint in checkpoints]
+    repeated_list = [checkpoint for checkpoint in checkpoints for _ in range(num_permutations)]
     checkpoint_list = perform_batch_permutation(repeated_list, permutation_list)
     if keep_original:
         for i in range(len(checkpoints)):
@@ -194,18 +194,15 @@ def perform_single_permutation(checkpoint_in, permutations):
                     #conv flattened and followed by linear
                     new_weights = jnp.copy(checkpoint[next_layer]['w'])
                     block_length = checkpoint[next_layer]['w'].shape[0] // len(index_new)
+                    
                     for idx_old, idx_new in enumerate(index_new):
-                        #for fcdx in range(block_length):
-                        #    offset_old = idx_old * block_length + fcdx
-                        #    offset_new = idx_new * block_length + fcdx
-                        #    new_weights[offset_old,:] = checkpoint[next_layer]['w'][offset_new,:]
-                        offset_old = idx_old * block_length 
-                        offset_new = idx_new * block_length  
-                        #new_weights = new_weights.at[offset_old:offset_old+block_length, :].set(checkpoint[next_layer]['w'][offset_new:offset_new+block_length, :])
-                        slice_new = jax.lax.dynamic_slice(checkpoint[next_layer]['w'], (offset_new, 0), (block_length, checkpoint[next_layer]['w'].shape[1]))
-                        new_weights = jax.lax.dynamic_update_slice(new_weights, slice_new, (offset_old, 0))    
+                        for fcdx in range(block_length):
+                            offset_old = idx_old + len(index_new) * fcdx
+                            offset_new = idx_new + len(index_new) * fcdx
+                            slice_new = jax.lax.dynamic_slice(checkpoint[next_layer]['w'], (offset_new, 0), (1, checkpoint[next_layer]['w'].shape[1]))
+                            new_weights = jax.lax.dynamic_update_slice(new_weights, slice_new, (offset_old, 0))    
+    
                     checkpoint[next_layer]['w'] = new_weights
-            
     return checkpoint 
 
 def perform_batch_permutation(checkpoints, permutations):
@@ -231,14 +228,15 @@ def __get_next_layer(checkpoint, layer):
             found_current_layer = True
     return None
 
-if __name__=='__main__':    
-    from model_zoo_jax.zoo_dataloader import load_nets
+if __name__=='__main__':   
     
-    inputs, all_labels = load_nets(n=32, 
-                                   data_dir='model_zoo_jax/checkpoints/mnist_smallCNN_fixed_zoo',
+    from model_zoo_jax import load_nets
+    
+    inputs, all_labels = load_nets(n=8, 
+                                   data_dir='../THESIS_first_old_path/model_zoo_jax/checkpoints/mnist_smallCNN_fixed_zoo',
                                    flatten=False,
                                    num_checkpoints=1)
-    rng = random.PRNGKey(42)
+    rng = random.PRNGKey(1)
     
     params = inputs[0]
     print("param count:", sum(x.size for x in jax.tree_util.tree_leaves(params)))
@@ -269,9 +267,19 @@ if __name__=='__main__':
     end = time.time()
     print("one batch takes: {}".format(end-start))
     print("num models: {}".format(len(result)))
-    #print(params["cnn/conv2_d_1"]['w'][0,0,0,:])
-    #print(params['cnn/conv2_d_2']['w'][0,0,:,0])
-    #print(permutations[0]["cnn/conv2_d_1"]['w'][0,0,0,:])
-    #print(permutations[1]["cnn/conv2_d_1"]['w'][0,0,0,:])
-    #print(permutations[1]['cnn/conv2_d_2']['w'][0,0,:,0])
-    #print(permutations[2]["cnn/conv2_d_1"]['w'][0,0,0,:])
+    
+    '''
+    # checking which dimension is flattened first - explanation for conv-to-linear permutation
+    import haiku as hk
+    x = jnp.array([[[1, 2],[3,4],[5,6]],[[7,8],[9,10],[11,12]]])
+    flat = hk.transform(lambda x: hk.Flatten(preserve_dims=1)(x))
+    param = flat.init(jax.random.PRNGKey(1),x)
+    y = flat.apply(param,None,x)
+    print(x.shape, x)
+    print(y.shape, y)
+    
+    x = jax.random.permutation(jax.random.PRNGKey(43),x,axis=2)
+    y = flat.apply(param,None,x)
+    print(x.shape, x)
+    print(y.shape, y)
+    '''
