@@ -4,6 +4,8 @@ from augmentations.permutation_augmentation import permute_checkpoint,permute_ba
 
 def augment_batch(rng, data, labels, num_p=3, keep_original=True,
                   layers = ["cnn/conv2_d","cnn/conv2_d_1","cnn/conv2_d_2", "cnn/linear"]):
+    if layers is None:
+        layers = list(data[0].keys())[:-1]
     data_new = permute_batch(rng, data, num_permutations=num_p,
                             permute_layers=layers,
                             keep_original=keep_original)
@@ -19,9 +21,14 @@ def augment(rng,data, labels,num_p=4,verbose=True,keep_original=True,
     i=0
     for datapoint,label in zip(data,labels):
         rng,subkey = jax.random.split(rng)
-        permuted = permute_checkpoint(subkey,datapoint,num_permutations=num_p,
-                                      permute_layers=layers,
-                                      keep_original=keep_original)
+        if layers is None:
+            permuted = permute_checkpoint(subkey,datapoint,num_permutations=num_p,
+                                        permute_layers=list(datapoint.keys())[:-1],
+                                        keep_original=keep_original)
+        else:
+            permuted = permute_checkpoint(subkey,datapoint,num_permutations=num_p,
+                                        permute_layers=layers,
+                                        keep_original=keep_original)
         data_new = data_new + permuted
         if keep_original:
             labels_new = labels_new + [label for i in range(num_p+1)]
