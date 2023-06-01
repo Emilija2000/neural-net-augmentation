@@ -100,7 +100,7 @@ class CTCNet(hk.Module):
 # Here I am using the original path to weight zoo, to be changed depending on directory
 with open('./transfer/0/run_data.json', 'r') as f:
     data = json.load(f)
-hyperparameters = data['hyperparameters']
+hyperparameters = data['hyperparameters'] 
 
 
 def net_fn(x: jnp.ndarray, is_training: bool) -> jnp.ndarray:
@@ -117,6 +117,7 @@ def net_fn(x: jnp.ndarray, is_training: bool) -> jnp.ndarray:
 net = hk.transform(net_fn)
 
 params = jnp.load('./transfer/0/epoch_20.npy', allow_pickle=True).item()
+#print(params)
 
 print("NETWORK ARCHITECTURE")
 for layer, param_dict in params.items():
@@ -165,22 +166,28 @@ def prune_weights_smallest_layer(params, prune_ratio):
 
 def prune_weights_smallest_global(params, prune_ratio):
     # Concatenate all weights into a single 1D array
-    all_weights = jnp.concatenate([jnp.abs(v).flatten() for k, v in params.items() if 'w' in k])
+    all_weights = jnp.concatenate([jnp.abs(param_dict['w']).flatten() for layer, param_dict in params.items() if 'w' in param_dict])
+
     # Compute the pruning threshold
     threshold = jnp.percentile(all_weights, prune_ratio * 100)
+
     # Prune the weights
     pruned_params = {}
-    for k, v in params.items():
-        if 'w' in k:
-            pruned_params[k] = jnp.where(jnp.abs(v) < threshold, 0, v)
-        else:
-            pruned_params[k] = v
+    for layer, layer_param in params.items():
+        pruned_layer = {}
+        for k, v in layer_param.items():
+            if 'w' in k:
+                pruned_layer[k] = jnp.where(jnp.abs(v) < threshold, 0, v)
+            else:
+                pruned_layer[k] = v
+        pruned_params[layer] = pruned_layer
 
     return pruned_params
 
+#TESTED
 def snr_pruning_global(params, prune_ratio):
     # Compute the SNR for all weights
-    snr_values = {k: jnp.abs(v.mean()) / v.std() for k, v in params.items() if 'w' in k}
+    snr_values = {k: jnp.abs(param_dict['w'].mean()) / param_dict['w'].std() for k, param_dict in params.items() if 'w' in param_dict}
 
     # Flatten all SNR values into a single 1D array
     all_snr = jnp.concatenate([v.flatten() for v in snr_values.values()])
@@ -190,33 +197,41 @@ def snr_pruning_global(params, prune_ratio):
 
     # Prune the weights
     pruned_params = {}
-    for k, v in params.items():
-        if 'w' in k:
-            pruned_params[k] = jnp.where(snr_values[k] < threshold, 0, v)
-        else:
-            pruned_params[k] = v
+    for layer, layer_param in params.items():
+        pruned_layer = {}
+        for k, v in layer_param.items():
+            if 'w' in k:
+                snr_layer = snr_values[layer]
+                pruned_layer[k] = jnp.where(snr_layer < threshold, 0, v)
+            else:
+                pruned_layer[k] = v
+        pruned_params[layer] = pruned_layer
 
     return pruned_params
 
+
+#TESTED
 def snr_pruning_layer(params, prune_ratio):
     pruned_params = {}
-    for k, v in params.items():
-        if 'w' in k:
-            # Compute the SNR for the weights of this layer
-            snr_values = jnp.abs(v.mean()) / v.std()
+    for layer, param_dict in params.items():
+        layer_param = {}
+        for k, v in param_dict.items():
+            if 'w' in k:
+                # Compute the SNR for the weights of this layer
+                snr_values = jnp.abs(v) / v.std()
 
-            # Compute the pruning threshold for this layer
-            threshold = jnp.percentile(snr_values, prune_ratio * 100)
+                # Compute the pruning threshold for this layer
+                threshold = jnp.percentile(snr_values, prune_ratio * 100)
 
-            # Prune the weights of this layer
-            pruned_params[k] = jnp.where(snr_values < threshold, 0, v)
-        else:
-            pruned_params[k] = v
-
+                # Prune the weights of this layer
+                layer_param[k] = jnp.where(snr_values < threshold, 0, v)
+            else:
+                layer_param[k] = v
+        pruned_params[layer] = layer_param
     return pruned_params
 
 
-
+# TESTED
 def get_statistics(params):
     """ Instead of using the weights, we return 8 statistics for each layer (Classifying the classifier paper - feature-based meta-classification
 
@@ -227,9 +242,9 @@ def get_statistics(params):
     for layer_name, layer_params in params.items():
         stats_layer_params = {}
         for param_name, param_values in layer_params.items():
-            if param_name == 'w':  # only prune weights ('w')
+            if 'w' in param_name:  # only prune weights ('w')
                 stats = [np.mean(param_values), np.std(param_values)**2, skew(param_values), np.percentile(param_values, 1), 
-                 np.percentile(param_values, 25), np.percentile(param_values, 50), np.percentile(param_values, 75), np.percentile(param_values, 99)]
+                np.percentile(param_values, 25), np.percentile(param_values, 50), np.percentile(param_values, 75), np.percentile(param_values, 99)]
                 stats_layer_params[param_name] = stats
             else:
                 stats_layer_params[param_name] = param_values
@@ -248,19 +263,21 @@ In this example, we're creating a binary mask for each layer of weights, where v
 if the corresponding weight is greater than the pruning threshold and 0 otherwise. 
 """
 
+# TESTED
 def create_mask(params, prune_ratio):
     mask = {}
-    for k, v in params.items():
-        if 'w' in k:
-            # Compute the threshold
-            threshold = jnp.percentile(jnp.abs(v), prune_ratio * 100)
-
-            # Create a mask that is 1 where weights are greater than the threshold and 0 otherwise
-            mask[k] = jnp.where(jnp.abs(v) > threshold, 1, 0)
-        else:
-            # For biases just create a mask of ones
-            mask[k] = jnp.ones_like(v)
-
+    for layer, param_dict in params.items():
+        sub_mask = {}
+        for k, v in param_dict.items():
+            if 'w' in k:
+                # Compute the threshold
+                threshold = jnp.percentile(jnp.abs(v), prune_ratio * 100)
+                # Create a mask that is 1 where weights are greater than the threshold and 0 otherwise
+                sub_mask[k] = jnp.where(jnp.abs(v) > threshold, 1, 0)
+            else:
+                # For biases just create a mask of ones
+                sub_mask[k] = jnp.ones_like(v)
+        mask[layer] = sub_mask
     return mask
 
 
@@ -275,10 +292,8 @@ def main():
         mask = create_mask(params, prune_ratio) # Create a mask
         pruned_params = {k: v * mask[k] for k, v in params.items()} # Apply the mask
 
-        # Here I am using the original path to weight zoo, to be changed depending on directory
         jnp.save('./transfer/'+ str(i) + '/epoch_20_pruned.npy', pruned_params)
 
 
 
 #main()
-
