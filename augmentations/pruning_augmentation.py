@@ -280,6 +280,17 @@ def create_mask(params, prune_ratio):
         mask[layer] = sub_mask
     return mask
 
+def apply_mask(params, mask):
+    pruned_params = {}
+    for layer, param_dict in params.items():
+        layer_params = {}
+        for k, v in param_dict.items():
+            if 'w' in layer_name:
+                layer_param[k] = v * mask[layer][k]
+            else:
+                layer_param[k] = v
+        pruned_params[layer] = layer_param
+    return pruned_params
 
 
 def main():
@@ -288,12 +299,6 @@ def main():
         prune_ratio = 0.5  # 50% of the weights will be pruned
         pruned_params = prune_weights_random_layer(params, prune_ratio)
 
-        # Using masking as a form of pruning
-        mask = create_mask(params, prune_ratio) # Create a mask
-        pruned_params = {k: v * mask[k] for k, v in params.items()} # Apply the mask
-
         jnp.save('./transfer/'+ str(i) + '/epoch_20_pruned.npy', pruned_params)
-
-
 
 #main()
