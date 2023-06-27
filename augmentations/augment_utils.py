@@ -2,8 +2,20 @@ import jax
 import jax.numpy as jnp
 from augmentations.permutation_augmentation import permute_checkpoint,permute_batch
 
+def augment_whole(rng,data,labels,num_p=3, keep_original=True,bs=8):
+    data_new = []
+    for i in range(len(data)//bs-1):
+        rng, subkey = jax.random.split(rng)
+        data_new.append(permute_batch(subkey,data[i*bs:(i+1)*bs],
+                                      permute_layers=list(data[i*bs].keys())[:-1],
+                                      keep_original=keep_original))
+    
+    num_labels = num_p+1 if keep_original else num_p
+    labels_new = [labels[j] for j in range(len(labels)) for i in range(num_labels)]
+    return data_new, jnp.array(labels_new)
+
 def augment_batch(rng, data, labels, num_p=3, keep_original=True,
-                  layers = ["cnn/conv2_d","cnn/conv2_d_1","cnn/conv2_d_2", "cnn/linear"]):
+                  layers = None):
     if layers is None:
         layers = list(data[0].keys())[:-1]
     data_new = permute_batch(rng, data, num_permutations=num_p,
@@ -15,7 +27,7 @@ def augment_batch(rng, data, labels, num_p=3, keep_original=True,
     return data_new, jnp.array(labels_new)
 
 def augment(rng,data, labels,num_p=4,verbose=True,keep_original=True,
-            layers= ["cnn/conv2_d","cnn/conv2_d_1","cnn/conv2_d_2", "cnn/linear"]):
+            layers= None):
     data_new = []
     labels_new = []
     i=0

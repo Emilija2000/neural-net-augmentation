@@ -20,7 +20,7 @@ def test_permutations():
     # good dimensions
     chex.assert_trees_all_equal_shapes(*permutations)
     
-    # perserves output
+    # preserves output
     num_permute=5
     permutations = permute_checkpoint(subkey, params, permute_layers=layers,num_permutations=5,keep_original=True)
     rng,subkey = jax.random.split(rng)
@@ -40,12 +40,12 @@ def test_batched_permutations():
         param_batch.append(net.init(subkey, jnp.ones([28, 28, 3])))
     layers = list(param_batch[0].keys())[:-1]
     
-    # perserves original
+    # preserves original
     permutations = permute_batch(subkey,param_batch,permute_layers=layers,num_permutations=1,keep_original=True)
     for i in range(10):
         chex.assert_trees_all_close(permutations[2*i],param_batch[i],atol=5e-06)
     
-    # perserves output
+    # preserves output
     permutations = permute_batch(subkey,param_batch,permute_layers=layers,num_permutations=3,keep_original=False)
     assert len(permutations) == 3*len(param_batch)
     
