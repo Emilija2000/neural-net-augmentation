@@ -8,6 +8,7 @@ from jax import random, jit, vmap
 import math
 import numpy as np
 import time
+import sys
 
 from typing import List
 from functools import partial
@@ -101,10 +102,10 @@ def __get_permutations_per_layer(rng, checkpoint, permute_layers, permutation_mo
     
     for layer in permute_layers:
         # get the dimension along which to permute
-        if "conv" in layer:
+        if "conv" in layer.lower():
             w = checkpoint[layer]['w']
             kernel = w.shape[3] #out channel dimension 
-        elif "linear" in layer:
+        elif "linear" in layer.lower():
             w = checkpoint[layer]['w']
             kernel=w.shape[1] # out features dimension
         else:
@@ -129,7 +130,12 @@ def __get_permutations_per_layer(rng, checkpoint, permute_layers, permutation_mo
 
 def __approximate_num_permutations(n):
     """Approximate n!"""
-    return int(round(math.sqrt(2*math.pi*n) * (n/math.e)**n))+1
+    try:
+        result = int(round(math.sqrt(2 * math.pi * n) * (n / math.e) ** n)) + 1
+    except OverflowError:
+        result = sys.maxsize
+    return result
+
 
 def __get_permutation_combinations(rng, layer_permutations, permutation_mode='random', num_permute=100):
     """Given a list of permutations per layer, combine them into joint permutations of the whole model
@@ -175,7 +181,7 @@ def perform_single_permutation(checkpoint_in, permutations):
             ValueError("Layer name unknown or unavailable (note that you cannot permute the last layer")
         else:
             # permute current
-            if "conv" in layer:
+            if "conv" in layer.lower():
                 checkpoint[layer]['w'] = checkpoint[layer]['w'][:,:,:,index_new]
                 if 'b' in checkpoint[layer]:
                     checkpoint[layer]['b']=checkpoint[layer]['b'][index_new]
@@ -185,9 +191,9 @@ def perform_single_permutation(checkpoint_in, permutations):
                     checkpoint[layer]['b']=checkpoint[layer]['b'][index_new]
             
             #permute next
-            if "conv" in next_layer:
+            if "conv" in next_layer.lower():
                 checkpoint[next_layer]['w']=checkpoint[next_layer]['w'][:,:,index_new,:]
-            elif "linear" in next_layer:
+            elif "linear" in next_layer.lower():
                 if checkpoint[next_layer]['w'].shape[0] == len(index_new):
                     checkpoint[next_layer]['w']=checkpoint[next_layer]['w'][index_new,:]
                 else:
