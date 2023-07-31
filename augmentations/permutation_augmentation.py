@@ -13,6 +13,44 @@ import sys
 from typing import List
 from functools import partial
 
+def permute_last_layer(rng, checkpoints):
+    """
+    Permutes only the last layer (as augmentation) - is predictive power invariant to class order? 
+    
+    Arguments:
+        rng (jax.random.PRNGKey) - random seed
+        checkpoints(list): list of jax pytrees - a batch to permute
+    Returns:
+        list model checkpoints (as jax pytrees) with permuted weights 
+    """
+    layer = list(checkpoints[0].keys())[-1]
+    rng, subkey = jax.random.split(rng)
+    permutation_list, rng = __get_permutations_per_layer(subkey, checkpoints[0], [layer], 
+                                                    permutation_mode='random',
+                                                    num_permute = len(checkpoints))
+    rng, subkey = jax.random.split(rng)
+    permutation_list, rng = __get_permutation_combinations(subkey, permutation_list,
+                                                    permutation_mode='random',
+                                                    num_permute = len(checkpoints))
+    
+    checkpoint_list = []
+    
+    for checkpoint_in, permutations in zip(checkpoints,permutation_list):
+        checkpoint = jax.tree_util.tree_map(lambda x: jnp.copy(x), checkpoint_in)
+        for layer, index_new in permutations.items():
+            # permute current
+            if "conv" in layer.lower():
+                checkpoint[layer]['w'] = checkpoint[layer]['w'][:,:,:,index_new]
+                if 'b' in checkpoint[layer]:
+                    checkpoint[layer]['b']=checkpoint[layer]['b'][index_new]
+            elif "linear" in layer:
+                checkpoint[layer]['w']=checkpoint[layer]['w'][:,index_new]
+                if 'b' in checkpoint[layer]:
+                    checkpoint[layer]['b']=checkpoint[layer]['b'][index_new]
+        checkpoint_list.append(checkpoint)
+    return checkpoint_list
+
+
 def permute_batch(rng, checkpoints,
                   permute_layers:List[str]=["cnn/conv2_d_1", "cnn/linear"],
                   permutation_mode: str = "random",
@@ -24,7 +62,7 @@ def permute_batch(rng, checkpoints,
     
     Arguments:
         checkpoints (list):     list of jax pytrees - a batch to permute
-        permute_layers (list):  which layers to permute, default: ["cnn/conv2_d_1", "cnn/linear"]
+        permute_layers (list):  which layers to permute, default: all but last
         permutation_mode (str): "random" or "complete" - weather to choose random permutations 
                                 to perform or to perform all possible permutations, default: "random"
         num_permutations (int): how many random permutations to perform, ignored if permutation_mode="complete",
@@ -50,7 +88,10 @@ def permute_batch(rng, checkpoints,
         raise NotImplementedError("Batches of different models cannot yet be permuted as a batch")
     
     checkpoint_list = []
-    repeated_list = [checkpoint for checkpoint in checkpoints for _ in range(num_permutations)]
+    if num_permutations>1:
+        repeated_list = [checkpoint for checkpoint in checkpoints for _ in range(num_permutations)]
+    else:
+        repeated_list = checkpoints
     checkpoint_list = perform_batch_permutation(repeated_list, permutation_list)
     if keep_original:
         for i in range(len(checkpoints)):
@@ -238,7 +279,7 @@ if __name__=='__main__':
     
     from model_zoo_jax import load_nets
     
-    inputs, all_labels = load_nets(n=8, 
+    inputs, all_labels = load_nets(n=100, 
                                    data_dir='../THESIS_first_old_path/model_zoo_jax/checkpoints/mnist_smallCNN_fixed_zoo',
                                    flatten=False,
                                    num_checkpoints=1)
@@ -260,7 +301,7 @@ if __name__=='__main__':
     for i in range(len(inputs)):
         params = inputs[0]
         rng,subkey = random.split(rng)
-        result = result + permute_checkpoint(subkey,params,num_permutations=1,keep_original=False)
+        result = result + permute_checkpoint(subkey,params,num_permutations=10,keep_original=False)
     end = time.time()
     print("one batch takes: {}".format(end-start))
     print("num models: {}".format(len(result)))
@@ -269,7 +310,7 @@ if __name__=='__main__':
     print('permute using batch')
     start = time.time()
     rng,subkey = random.split(rng)
-    result = permute_batch(subkey,inputs,num_permutations=1,keep_original=False)
+    result = permute_batch(subkey,inputs,num_permutations=10,keep_original=False)
     end = time.time()
     print("one batch takes: {}".format(end-start))
     print("num models: {}".format(len(result)))

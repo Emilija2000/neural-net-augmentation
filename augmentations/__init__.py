@@ -1,3 +1,3 @@
-from augmentations.permutation_augmentation import permute_batch,permute_checkpoint,perform_single_permutation
+from augmentations.permutation_augmentation import permute_batch,permute_checkpoint,perform_single_permutation, permute_last_layer
 from augmentations.augment_utils import augment, augment_batch, augment_whole
 
